@@ -1,12 +1,12 @@
 # Maya PoseMemorizer
-Maya Script
+Maya Script  
 Simple Pose copy & paste tool
 
-![PoseMemoraizer_anim](https://user-images.githubusercontent.com/20962065/92997655-c2f0bd80-f54f-11ea-8f6c-6573a8bd402a.gif)
+![PoseMemoraizer_anim](https://user-images.githubusercontent.com/20962065/93213976-874c3280-f79f-11ea-82c3-4176d4b22668.gif)
 
 ## Install
 
-`pose_memoraizer`フォルダをMayaのScriptフォルダにコピーしてください。
+`pose_memoraizer`フォルダをMayaのScriptフォルダにコピーしてください。  
 または、Mayaの`PYTHONPATH`が通っているフォルダにコピーしてください。
 
 ## Usage
@@ -19,7 +19,10 @@ pose_memorizer.run()
 
 3. ポーズを反転させたい場合は`Mirror`にチェックと各種パラメータを確認してください。
 
-4. 適用させたいtransformノードを選択して、`Apply`ボタンを押してください。
+4. 適用させたいtransformノードを選択して、保存したPoseを選択してください。
+
+5. `Apply`ボタンを押してください。
+
 
 ## Note
 
