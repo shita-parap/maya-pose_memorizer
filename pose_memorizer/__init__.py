@@ -6,12 +6,11 @@
 # -----------------------------------------------------------------------------
 
 _name = "PoseMemorizer"
-_version = "0.0.1"
+_version = "0.1.0"
 
 # -----------------------------------------------------------------------------
 def run():
     from pose_memorizer import gui as pomezer_gui
-    reload(pomezer_gui)
     pomezer_gui.main()
     return
 

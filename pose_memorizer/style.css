@@ -1,0 +1,10 @@
+QListWidget#pose_list::item
+{
+    border: 0px;
+    padding: 3px 4px;
+}
+
+QListWidget#pose_list::item:selected
+{
+    background-color: #5285a6;
+}
