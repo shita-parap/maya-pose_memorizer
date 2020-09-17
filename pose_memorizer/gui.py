@@ -5,6 +5,8 @@
 
 import os
 import traceback
+import json
+import functools
 
 from maya import cmds
 from maya import mel
@@ -22,8 +24,6 @@ import pose_memorizer.core as pomezer_core
 # -----------------------------------------------------------------------------
 
 WINDOWS_NAME = "PoseMemorizer"
-VERSION = pomezer._version
-# WINDOWS_TITLE = "{title} Ver_{ver}".format(title=WINDOWS_NAME, ver=VERSION)
 
 
 # -----------------------------------------------------------------------------
@@ -47,6 +47,77 @@ class Callback(object):
             traceback.print_exc()
         finally:
             cmds.undoInfo(closeChunk=True)
+
+
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+class OptionFile(object):
+
+    FILENAME = "option.json"
+
+    def __init__(self):
+        super(OptionFile, self).__init__()
+        self.version = pomezer._version
+        self.parameter = {}
+        self._file_path = self._get_file_path()
+        return
+
+    def unify_sep(func):
+
+        @functools.wraps(func)
+        def _wrap(*args, **kwargs):
+
+            def unify_path(path):
+                sep = os.sep
+                if sep == "\\":
+                    return path.replace("/", sep)
+                else:
+                    return path.replace("\\", sep)
+
+            path = func(*args, **kwargs)
+
+            if hasattr(path, "__iter__") is True:
+                return [unify_path(p) for p in path]
+            else:
+                return unify_path(path)
+        return _wrap
+
+    def _check_file_path(self):
+        dir_path = os.path.dirname(self._file_path)
+        if os.path.exists(dir_path) is False:
+            os.makedirs(dir_path)
+        return
+
+    @unify_sep
+    def _get_file_path(self):
+        prefs_path = os.path.join(cmds.about(preferences=True), "prefs")
+        ui_lang = cmds.about(uiLanguage=True)
+        if ui_lang != "en_US":
+            prefs_path = os.path.join(prefs_path, ui_lang, "prefs")
+
+        return os.path.join(prefs_path, "scripts", pomezer._config_dir, self.FILENAME)
+
+    def set_parameter(self, parameter):
+        self.parameter = parameter
+        return
+
+    def load(self):
+        data = {}
+        with open(self._file_path, "r") as f:
+            data = json.load(f)
+        file_version = data.get("version", None)
+        if file_version != self.version:
+            return None
+
+        return data
+
+    def save(self):
+        data = {"version": self.version}
+        data.update(self.parameter)
+        self._check_file_path()
+        with open(self._file_path, "w") as f:
+            json.dump(data, f, indent=4)
+        return
 
 
 # -----------------------------------------------------------------------------
@@ -132,7 +203,10 @@ class PoseMemorizerDockableWidget(MayaQWidgetDockableMixin, ScrollWidget):
     def __init__(self, parent=None):
         super(PoseMemorizerDockableWidget, self).__init__(parent=parent)
 
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
+
         self.pomezer = pomezer_core.PoseMemorizer()
+        self.op_file = OptionFile()
 
         self.widget = QtWidgets.QWidget(self)
         widget = self.widget
@@ -221,6 +295,13 @@ class PoseMemorizerDockableWidget(MayaQWidgetDockableMixin, ScrollWidget):
 
         widget.setLayout(layout)
         self.setWidget(widget)
+
+        self._option_load()
+        QtWidgets.qApp.aboutToQuit.connect(self._option_save, QtCore.Qt.UniqueConnection)
+        return
+
+    def dockCloseEventTriggered(self):
+        self._option_save()
         return
 
     def _add_pose(self, pose_data):
@@ -232,6 +313,15 @@ class PoseMemorizerDockableWidget(MayaQWidgetDockableMixin, ScrollWidget):
         self.pose_list.addItem(item)
         self.pose_list.clearSelection()
         return
+
+    def _get_ui_parameter(self):
+        reslut = {}
+        reslut["mirror_name"] = self.mirror_name_combo.currentText()
+        reslut["mirror_axis"] = self.mirror_axis_combo.currentText()
+        reslut["mirror"] = self.mirror_check.isChecked()
+        reslut["setkey"] = self.setkey_check.isChecked()
+        reslut["namespace"] = self.namespace_check.isChecked()
+        return reslut
 
     def _get_sel_item(self):
         items = self.pose_list.selectedItems()
@@ -279,17 +369,35 @@ class PoseMemorizerDockableWidget(MayaQWidgetDockableMixin, ScrollWidget):
         if item is None:
             return
         pose_data = item.data(QtCore.Qt.UserRole + 1)
-        mirror = self.mirror_check.isChecked()
-        mirror_name = self.mirror_name_combo.currentText()
-        mirror_axis = self.mirror_axis_combo.currentText()
-        setkey = self.setkey_check.isChecked()
-        namespace = self.namespace_check.isChecked()
+        ui_parameter = self._get_ui_parameter()
+        mirror_name = ui_parameter["mirror_name"]
+        mirror_axis = ui_parameter["mirror_axis"]
+        mirror = ui_parameter["mirror"]
+        setkey = ui_parameter["setkey"]
+        namespace = ui_parameter["namespace"]
         self.pomezer.apply_pose(pose=pose_data,
                                 mirror=mirror,
                                 mirror_name=mirror_name,
                                 mirror_axis=mirror_axis,
                                 setkey=setkey,
                                 namespace=namespace)
+        return
+
+    def _option_load(self):
+        ui_parameter = self.op_file.load()
+        if ui_parameter is None:
+            return
+        self.mirror_name_combo.setCurrentText(ui_parameter["mirror_name"])
+        self.mirror_axis_combo.setCurrentText(ui_parameter["mirror_axis"])
+        self.mirror_check.setChecked(ui_parameter["mirror"])
+        self.setkey_check.setChecked(ui_parameter["setkey"])
+        self.namespace_check.setChecked(ui_parameter["namespace"])
+        return
+
+    def _option_save(self):
+        ui_parameter = self._get_ui_parameter()
+        self.op_file.set_parameter(ui_parameter)
+        self.op_file.save()
         return
 
 
@@ -313,8 +421,6 @@ class PoseMemorizerMainWindow(object):
         # Restore
         if restore is True:
             self._make_widget()
-            # Current Directory
-            os.chdir(os.path.dirname(__file__))
             # Restore parent
             mixinPtr = MQtUtil.findControl(self.name)
             wks = MQtUtil.findControl(self.workspace_name)
@@ -342,7 +448,6 @@ class PoseMemorizerMainWindow(object):
         except IOError:
             style = ""
 
-        print style
         self.widget.setStyleSheet(style)
         return
 
@@ -383,7 +488,6 @@ class PoseMemorizerMainWindow(object):
         self._resize(self.HEIGHT, self.WIDTH)
         # Set Windows Title
         widget.setWindowTitle(self._windows_title)
-
         return
 
 
@@ -392,7 +496,6 @@ def main():
     # show gui
     pomezer_window = PoseMemorizerMainWindow()
     pomezer_window.show()
-
     return
 
 
